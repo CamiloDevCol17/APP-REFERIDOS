@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Referir Candidato - Concentrix</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+  input { width: 100%; padding: 10px; margin: 6px 0 16px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+  label { font-weight: bold; }
+  button {
+    padding: 14px; background: #111; color: #fff;
+    border: none; border-radius: 6px; font-size: 16px; cursor: pointer;
+  }
+  #btnSubir { width: 100%; }
+  button:disabled { background: #888; cursor: not-allowed; }
+  .spinner {
+    border: 3px solid #f3f3f3; border-top: 3px solid #fff;
+    border-radius: 50%; width: 16px; height: 16px;
+    animation: spin 1s linear infinite; display: inline-block; margin-right: 8px; vertical-align: middle;
+  }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+  .mensaje { margin-top: 16px; padding: 12px; border-radius: 6px; text-align: center; }
+  .exito { background: #d4edda; color: #155724; }
+  .error { background: #f8d7da; color: #721c24; }
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; }
+  th { background: #f4f4f4; }
+  .volver { margin-top: 16px; background: #eee; color: #111; }
+  #vistaTabla { display: none; }
+</style>
+</head>
+<body>
+
+<div id="vistaFormulario">
+  <h2>Referir un Candidato</h2>
+  <form id="formReferido">
+    <label>Nombre del Candidato *</label>
+    <input type="text" id="nombre" required placeholder="Jane">
+
+    <label>Apellido del Candidato *</label>
+    <input type="text" id="apellido" required placeholder="Smith">
+
+    <label>Correo del Candidato *</label>
+    <input type="email" id="correo" required placeholder="jane@email.com">
+
+    <label>Teléfono del Candidato</label>
+    <input type="tel" id="telefono" placeholder="3001234567">
+
+    <button type="submit" id="btnSubir">Subir</button>
+  </form>
+  <div id="resultado"></div>
+</div>
+
+<div id="vistaTabla">
+  <h2>Ya Aplicaron</h2>
+  <p>Estos candidatos ya habían sido invitados anteriormente y no cuentan para tus estadísticas:</p>
+  <table>
+    <thead>
+      <tr><th>Nombre</th><th>Apellido</th><th>Correo</th><th>Teléfono</th><th>Fecha</th></tr>
+    </thead>
+    <tbody id="tablaBody"></tbody>
+  </table>
+  <button class="volver" id="btnVolver">Volver al formulario</button>
+</div>
+
+<script>
+const formulario = document.getElementById('formReferido');
+const vistaFormulario = document.getElementById('vistaFormulario');
+const vistaTabla = document.getElementById('vistaTabla');
+const tablaBody = document.getElementById('tablaBody');
+
+formulario.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('btnSubir');
+  const resultado = document.getElementById('resultado');
+
+  const datos = {
+    nombre: document.getElementById('nombre').value,
+    apellido: document.getElementById('apellido').value,
+    correo: document.getElementById('correo').value,
+    telefono: document.getElementById('telefono').value
+  };
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Subiendo...';
+  resultado.innerHTML = '';
+
+  try {
+    const resp = await fetch('/api/referir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(datos)
+    });
+    const data = await resp.json();
+
+    if (data.ok && data.duplicado) {
+      await cargarTabla();
+      vistaFormulario.style.display = 'none';
+      vistaTabla.style.display = 'block';
+    } else if (data.ok) {
+      resultado.innerHTML = `<div class="mensaje exito">${data.mensaje}</div>`;
+      formulario.reset();
+    } else {
+      resultado.innerHTML = `<div class="mensaje error">${data.mensaje}</div>`;
+    }
+  } catch (err) {
+    resultado.innerHTML = `<div class="mensaje error">Error de conexión: ${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Subir';
+  }
+});
+
+async function cargarTabla() {
+  const resp = await fetch('/api/ya-aplicaron');
+  const data = await resp.json();
+  tablaBody.innerHTML = data.map(r => `
+    <tr>
+      <td>${r.nombre}</td>
+      <td>${r.apellido}</td>
+      <td>${r.correo}</td>
+      <td>${r.telefono || '-'}</td>
+      <td>${new Date(r.fecha).toLocaleString()}</td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('btnVolver').addEventListener('click', () => {
+  vistaTabla.style.display = 'none';
+  vistaFormulario.style.display = 'block';
+  document.getElementById('resultado').innerHTML = '';
+});
+</script>
+</body>
+</html>
