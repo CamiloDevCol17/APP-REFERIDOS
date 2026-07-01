@@ -33,17 +33,36 @@ app.post('/api/referir', async (req, res) => {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    const context = await browser.newContext();
+
+    // Contexto con user-agent realista para evitar bloqueos por detección de bot
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      viewport: { width: 1366, height: 768 }
+    });
     const page = await context.newPage();
 
     await page.goto(TARGET_URL, { waitUntil: 'networkidle', timeout: 60000 });
 
-    // Paso 1: seleccionar posición
-    await page.waitForSelector('button.campaign-card[data-id="1044"]', { timeout: 30000 });
-    await page.click('button.campaign-card[data-id="1044"]');
+    // Margen extra para que la SPA termine de renderizar tarjetas de campañas
+    await page.waitForTimeout(3000);
 
-    // Paso 2: formulario
+    // Selector combinado: por data-id O por texto (más tolerante a cambios)
+    const posicionSelector = 'button.campaign-card[data-id="1044"], button.campaign-card:has-text("Friends at Work")';
+
+    try {
+      await page.waitForSelector(posicionSelector, { timeout: 60000 });
+    } catch (errSelector) {
+      // Si falla, guardamos captura de pantalla para diagnóstico
+      await page.screenshot({ path: '/tmp/debug-step1.png', fullPage: true });
+      console.error('No se encontró la posición. Screenshot guardado en /tmp/debug-step1.png');
+      throw errSelector;
+    }
+
+    await page.click(posicionSelector);
+
+    // Paso 2: esperar el formulario
     await page.waitForSelector('input[name="candidateFirstName"]', { timeout: 30000 });
+
     await page.fill('input[name="candidateFirstName"]', nombre);
     await page.fill('input[name="candidateLastName"]', apellido);
     await page.fill('input[name="candidateEmail"]', correo);
@@ -67,7 +86,7 @@ app.post('/api/referir', async (req, res) => {
     await page.waitForSelector('#termsModalContinueBtn', { timeout: 15000 });
     await page.click('#termsModalContinueBtn');
 
-    // Esperar respuesta del sitio (éxito o mensaje de duplicado)
+    // Esperar respuesta del sitio
     await page.waitForTimeout(4000);
     const bodyText = await page.textContent('body');
 
@@ -95,7 +114,6 @@ app.post('/api/referir', async (req, res) => {
   }
 });
 
-// Endpoint para consultar la tabla de "Ya Aplicaron"
 app.get('/api/ya-aplicaron', (req, res) => {
   res.json(leerDB());
 });
